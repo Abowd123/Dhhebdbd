@@ -1,0 +1,56 @@
+name: Build Android APK
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Version (e.g. v1.1.1)"
+        required: true
+        default: "v1.1.1"
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 17
+      - name: Regenerate SW core
+        run: node scripts/gen-sw-core.js
+      - name: Build web app
+        run: npm run build
+      - name: Copy dist to mobile/www
+        run: |
+          rm -rf mobile/www
+          cp -r dist mobile/www
+      - name: Install Capacitor
+        working-directory: mobile
+        run: npm install
+      - name: Add Android platform
+        working-directory: mobile
+        run: npx cap add android
+      - name: Sync web assets
+        working-directory: mobile
+        run: npx cap sync android
+      - name: Build debug APK
+        working-directory: mobile/android
+        run: |
+          chmod +x gradlew
+          ./gradlew assembleDebug --no-daemon
+      - name: Rename APK
+        run: cp mobile/android/app/build/outputs/apk/debug/app-debug.apk CivilDraft.apk
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ github.event.inputs.tag }}
+          name: CivilDraft ${{ github.event.inputs.tag }}
+          body: "Download CivilDraft.apk and install it on Android."
+          files: CivilDraft.apk
